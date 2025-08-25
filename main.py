@@ -1,4 +1,4 @@
-import kagglehub
+
 import pandas as pd
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 from typing import Dict, Any, Optional
@@ -6,7 +6,7 @@ import os
 import io
 
 # Initialize FastAPI app
-app = FastAPI(title="Airlines Data Analysis API", description="API for analyzing airlines flights data")
+app = FastAPI(title="Pre Data Analysis API", description="API for pre-analyzing datasets as to give more context to LLMs")
 
 # Set pandas options
 pd.set_option('display.max_columns', 100)
