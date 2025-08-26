@@ -141,7 +141,7 @@ async def analyze_data(
                 return convert_to_serializable(d)
         
         # Prepare result with proper type conversion
-        result = {
+        analysis_data = {
             "file_info": {
                 "filename": file.filename,
                 "format": format,
@@ -157,7 +157,7 @@ async def analyze_data(
             "unique_values": convert_dict(unique_values)
         }
         
-        return result
+        return {"data": analysis_data}
         
     except HTTPException:
         raise
