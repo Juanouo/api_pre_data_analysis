@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: api_pre_data_analysis
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONPATH=/app
+    volumes:
+      # Optional: Mount local directory for development
+      # - .:/app
+      # Mount for temporary file storage if needed
+      - api_temp:/tmp
+    restart: unless-stopped
+    networks:
+      - api_network
+    healthcheck:
+      test: ["CMD", "uv", "run", "python", "-c", "import requests; requests.get('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Optional: Add a reverse proxy (nginx) for production
+  nginx:
+    image: nginx:alpine
+    container_name: api_nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      # For SSL certificates (uncomment if using HTTPS)
+      # - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - api
+    restart: unless-stopped
+    networks:
+      - api_network
+    profiles:
+      - production
+
+volumes:
+  api_temp:
+    driver: local
+
+networks:
+  api_network:
+    driver: bridge

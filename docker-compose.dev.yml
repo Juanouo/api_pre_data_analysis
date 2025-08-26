@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  api-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: api_pre_data_analysis_dev
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONPATH=/app
+      - ENVIRONMENT=development
+    volumes:
+      # Mount source code for hot reloading
+      - .:/app
+      - api_temp_dev:/tmp
+    restart: unless-stopped
+    networks:
+      - api_network_dev
+    command: ["uv", "run", "python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    healthcheck:
+      test: ["CMD", "uv", "run", "python", "-c", "import requests; requests.get('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  api_temp_dev:
+    driver: local
+
+networks:
+  api_network_dev:
+    driver: bridge
