@@ -5,6 +5,94 @@ from typing import Dict, Any, Optional
 import os
 import io
 
+def get_robust_correlation(data: pd.DataFrame) -> Dict[str, Any]:
+    """
+    Calculate correlation matrix with robust handling of missing values.
+    
+    Args:
+        data: pandas DataFrame
+    
+    Returns:
+        Dictionary with correlation data or empty dict if not possible
+    """
+    # Get only numeric columns
+    numeric_data = data.select_dtypes(include='number')
+    
+    if numeric_data.shape[1] < 2:
+        # Need at least 2 numeric columns for correlation
+        return {}
+    
+    try:
+        # First, try standard correlation
+        corr_matrix = numeric_data.corr(method='pearson', min_periods=1)
+        
+        # Check if we got a valid correlation matrix
+        if corr_matrix.empty or corr_matrix.isna().all().all():
+            # If standard correlation fails, try with dropna
+            cleaned_numeric = numeric_data.dropna()
+            if len(cleaned_numeric) > 1 and cleaned_numeric.shape[1] > 1:
+                corr_matrix = cleaned_numeric.corr(method='pearson')
+            else:
+                return {}
+        
+        # Remove any remaining NaN values by replacing with 0 for non-diagonal
+        # and 1 for diagonal (self-correlation)
+        corr_filled = corr_matrix.fillna(0)
+        for col in corr_filled.columns:
+            corr_filled.loc[col, col] = 1.0
+            
+        return corr_filled.to_dict()
+        
+    except Exception:
+        # If all else fails, return empty dict
+        return {}
+
+def get_best_sample_rows(data: pd.DataFrame, n_samples: int = 3) -> pd.DataFrame:
+    """
+    Get the best sample rows from DataFrame, prioritizing complete rows without nulls,
+    otherwise selecting rows with fewest missing values.
+    
+    Args:
+        data: pandas DataFrame to sample from
+        n_samples: number of sample rows to return
+    
+    Returns:
+        DataFrame with the best sample rows
+    """
+    # Ensure we don't ask for more samples than available rows
+    n_samples = min(n_samples, len(data))
+    
+    if n_samples == 0:
+        return data.iloc[:0]  # Return empty DataFrame with same structure
+    
+    # Count missing values per row
+    missing_per_row = data.isna().sum(axis=1)
+    
+    # Get rows with no missing values (complete rows)
+    complete_rows = data[missing_per_row == 0]
+    
+    if len(complete_rows) >= n_samples:
+        # We have enough complete rows, sample from them
+        if len(complete_rows) == n_samples:
+            return complete_rows
+        else:
+            return complete_rows.sample(n=n_samples, random_state=42)
+    else:
+        # Not enough complete rows, get all complete rows first
+        sample_rows = complete_rows.copy()
+        remaining_needed = n_samples - len(complete_rows)
+        
+        if remaining_needed > 0:
+            # Get remaining rows from those with fewest missing values
+            incomplete_rows = data[missing_per_row > 0]
+            if len(incomplete_rows) > 0:
+                # Sort by number of missing values (ascending) and take the best ones
+                sorted_incomplete = incomplete_rows.loc[missing_per_row[missing_per_row > 0].sort_values().index]
+                additional_rows = sorted_incomplete.head(remaining_needed)
+                sample_rows = pd.concat([sample_rows, additional_rows], ignore_index=True)
+        
+        return sample_rows
+
 # Initialize FastAPI app
 app = FastAPI(title="Pre Data Analysis API", description="API for pre-analyzing datasets as to give more context to LLMs")
 
@@ -152,8 +240,8 @@ async def analyze_data(
             "missing": convert_dict(data.isna().sum().to_dict()),
             "nunique": convert_dict(data.nunique().to_dict()),
             "describe": convert_dict(data.describe(include="all").to_dict()),
-            "sample": convert_dict(data.sample(min(3, len(data))).to_dict()),
-            "correlation": convert_dict(data.corr(numeric_only=True).to_dict()) if data.select_dtypes(include='number').shape[1] > 1 else {},
+            "sample": convert_dict(get_best_sample_rows(data, 3).to_dict()),
+            "correlation": convert_dict(get_robust_correlation(data)),
             "unique_values": convert_dict(unique_values)
         }
         
